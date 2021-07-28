@@ -1,0 +1,211 @@
+document.addEventListener("DOMContentLoaded", function () {
+
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.has('addonId')) {
+    setDownloadModalVisibility(true);
+    // try to open the curseforge app
+    let cf_uri = `curseforge://install?addonId=${urlParams.get('addonId')}`;
+    if (urlParams.has('fileId'))
+      cf_uri += `&fileId=${urlParams.get('fileId')}`;
+    setTimeout(function () {
+      window.location.href = cf_uri;
+    }, 500)
+    document.querySelector('#link-open-addon').href = cf_uri;
+  }
+
+  document.querySelector('.cf-ow-download-modal-container').addEventListener('click', function (e) {
+    if (e.target === this)
+      this.classList.remove('is-active');
+  })
+
+  handleMailForm();
+
+});
+
+function _getUrlParameter(url, name) {
+  var regex, results, search;
+  search = url.split('?')[1];
+  if (!search) {
+    return "";
+  }
+
+  name = name.replace(/[\[]/, '\\[').replace(/[\]]/, '\\]');
+  regex = new RegExp("(?:^|[\\?&])" + name + "=([^&#]*)");
+  results = regex.exec(search);
+  return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+
+if(!/Win/i.test(navigator.platform) && !/Mac/i.test(navigator.platform)){
+  Array.from(document.querySelectorAll('.legal')).forEach(el => el.classList.add('mobile'))
+}
+
+function macDownload(element){
+
+  if(!/Win/i.test(navigator.platform) && !/Mac/i.test(navigator.platform)){
+    setMsgModalVisibility(true);
+    return false;
+  }
+
+  if(window.ga !== undefined)
+    ga('send','event', 'CF-macOS', 'download')
+
+  return true;
+}
+
+function linkWithUtmParams(element){
+  const urlParams = new URLSearchParams(window.location.search);
+  urlParams.delete('addonId');
+  urlParams.delete('fileId');
+  element.href = element.href + '?' + urlParams.toString();
+  return true;
+}
+
+function performDownload(element) {
+  if (!OW) {
+    return true;
+  }
+
+  if(!/Win/i.test(navigator.platform) && !/Mac/i.test(navigator.platform)){
+    setMsgModalVisibility(true);
+    return false;
+  }
+
+  if(window.ga !== undefined)
+    ga('send','event', 'CF-PC', 'download');
+
+
+  let hrf = element.href;
+  try {
+    let url = OW.downloadCampaignTracking.getDownloadUrlForCampaign({
+      'PartnerId': _getUrlParameter(hrf, 'PartnerId'),
+      'ExtensionId': _getUrlParameter(hrf, 'ExtensionId'),
+      'Channel': _getUrlParameter(hrf, 'Channel')
+    });
+
+    element.href = url;
+  } catch (e) {
+    console.error(e);
+  }
+
+  return true;
+}
+
+function setDownloadModalVisibility(isVisible) {
+  document.querySelector('#cf-ow-download-modal')
+    .classList[isVisible ? 'add' : 'remove']('is-active');
+}
+
+function setMsgModalVisibility(isVisible) {
+  document.querySelector('#cf-ow-msg-modal')
+    .classList[isVisible ? 'add' : 'remove']('is-active');
+}
+
+function handleMailForm() {
+
+  // Get the form
+  var form = document.querySelector('#form');
+
+  // material design form style
+  const setActive = (el, active) => {
+    const formField = el.parentNode
+    if (active) {
+      formField.classList.add('is-active')
+    } else {
+      formField.classList.remove('is-active')
+      el.value === '' ? 
+        formField.classList.remove('is-filled') : 
+        formField.classList.add('is-filled')
+    }
+  }
+
+  [].forEach.call(
+    document.querySelectorAll('.input-row-item input, .input-row-item textarea'),
+    (el) => {
+      el.onblur = () => {
+        setActive(el, false)
+      }
+      el.onfocus = () => {
+        setActive(el, true)
+      }
+    }
+  )
+  
+  // Get the messages div and validation formats.
+  var successMessage = document.querySelector('#success-message');
+  var errorMessage = document.querySelector('#error-message');
+  var submitButton = document.querySelector('#submit-button');
+  const mailformat = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+
+  // Set up an event listener for the contact form.
+  form.addEventListener('submit', function (event) {
+
+    //email validation format and input
+    var emailInput = document.querySelector('#email-address');
+    var emailValue = emailInput.value;
+
+    // Stop the browser from submitting the form.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    
+    errorMessage.classList.remove('active');
+    // check email format or empty
+     if (emailValue.match(mailformat) && emailValue) {
+
+      submitFormData(emailValue);
+
+      submitButton.classList.add('loading');
+      emailInput.nextElementSibling.classList.remove('active');
+    } else {
+      emailInput.nextElementSibling.classList.add('active');
+    }
+
+  });
+
+  //event listener if email is op and remove tool tip validation
+  document.querySelector('#email-address').addEventListener('keyup', function (e) {
+    let thisVal = this.value;
+    if (thisVal.match(mailformat)) {
+      this.nextElementSibling.classList.remove('active');
+    }
+  });
+
+  function submitFormData(email) {
+
+    document.querySelector('#mce-EMAIL').value = email;
+    document.querySelector('#mc-embedded-subscribe').click();
+
+
+    var mailchimpSuccess = document.getElementById('mce-success-response');
+    var mailchimpError = document.getElementById('mce-error-response');
+
+    // observe when style is chaned and do some action
+    var observer = new MutationObserver(function (mutations) {
+      console.log('changed');
+      mutations.forEach(function (mutationRecord) {
+
+        if (mailchimpSuccess.textContent.length > 0) {
+          console.log('success');
+          successMessage.classList.add('active');
+          errorMessage.classList.remove('active');
+        }
+
+        if (mailchimpError.textContent.length > 0) {
+          console.log('fail');
+
+          var mailchimpErrorText = mailchimpError.innerHTML;
+          errorMessage.querySelector('span').innerHTML = mailchimpErrorText;
+          errorMessage.classList.add('active');
+          submitButton.classList.remove('loading');
+        }
+
+      });
+    });
+
+    // observe when style is chaned and do some action
+    observer.observe(mailchimpSuccess, { attributes: true, attributeFilter: ['style'] });
+    observer.observe(mailchimpError, { attributes: true, attributeFilter: ['style'] });
+
+  }
+
+}
+
